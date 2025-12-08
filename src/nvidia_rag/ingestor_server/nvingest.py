@@ -20,6 +20,7 @@ This is the module for NV-Ingest client wrapper.
 
 import logging
 import os
+from tarfile import tar_filter
 import time
 
 from nv_ingest_client.client import Ingestor, NvIngestClient
@@ -31,7 +32,7 @@ from nvidia_rag.utils.vdb.vdb_base import VDBRag
 logger = logging.getLogger(__name__)
 
 
-def _patched_wait_for_index(collection_name: str, num_elements: int, client):
+def _patched_wait_for_index(collection_name: str, expected_rows_dict: dict[str, int], client):
     """
     Patched version of wait_for_index that fixes the race condition bug.
     
@@ -62,11 +63,12 @@ def _patched_wait_for_index(collection_name: str, num_elements: int, client):
     for index_name in index_names:
         indexed_rows = 0
         already_indexed_rows = pre_flush_counts[index_name]  # Use pre-flush count as baseline
-        target_rows = already_indexed_rows + num_elements
+        # target_rows = already_indexed_rows + num_elements
+        target_rows = expected_rows_dict[index_name]
         
         logger.info(
             f"Waiting for index: {collection_name}, {index_name} - "
-            f"baseline: {already_indexed_rows}, inserting: {num_elements}, target: {target_rows}"
+            f"baseline: {already_indexed_rows}, target: {target_rows}"
         )
         
         while indexed_rows < target_rows:
@@ -117,7 +119,7 @@ def _apply_wait_for_index_patch():
 
 
 # Apply the patch when this module is loaded
-_apply_wait_for_index_patch()
+# _apply_wait_for_index_patch()
 
 
 def get_nv_ingest_client(config: NvidiaRAGConfig = None):
