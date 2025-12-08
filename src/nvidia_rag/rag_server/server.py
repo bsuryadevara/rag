@@ -126,7 +126,7 @@ NVIDIA_RAG = NvidiaRAG(config=CONFIG)
 
 metrics = None
 if CONFIG.tracing.enabled:
-    from .tracing import instrument
+    from nvidia_rag.utils.observability.tracing import instrument
 
     metrics = instrument(app, CONFIG)
 

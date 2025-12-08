@@ -60,9 +60,11 @@ from nvidia_rag.utils.health_models import (
     TaskManagementHealthInfo,
 )
 from nvidia_rag.utils.metadata_validation import MetadataField
+from nvidia_rag.utils.observability.tracing import get_tracer, trace_function
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
+TRACER = get_tracer("nvidia_rag.ingestor.server")
 
 tags_metadata = [
     {
@@ -107,6 +109,12 @@ EXAMPLE_DIR = "./"
 # Initialize configuration and ingestor
 CONFIG = NvidiaRAGConfig()
 NV_INGEST_INGESTOR = NvidiaRAGIngestor(mode=Mode.SERVER, config=CONFIG)
+METRICS = None
+if CONFIG.tracing.enabled:
+    # Avoid importing tracing instrumentation unless enabled to keep startup lean.
+    from nvidia_rag.utils.observability.tracing import instrument
+
+    METRICS = instrument(app, CONFIG, service_name="ingestor")
 
 
 class SplitOptions(BaseModel):
@@ -120,6 +128,7 @@ class SplitOptions(BaseModel):
         description="Number of overlapping units between consecutive splits.",
     )
 
+@trace_function("ingestor.server.extract_vdb_auth_token", tracer=TRACER)
 def _extract_vdb_auth_token(request: Request) -> str | None:
     """Extract bearer token from Authorization header (e.g., 'Bearer <token>')."""
     auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
@@ -529,6 +538,7 @@ class UpdateMetadataResponse(BaseModel):
 
 
 @app.exception_handler(RequestValidationError)
+@trace_function("ingestor.server.request_validation_exception_handler", tracer=TRACER)
 async def request_validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
@@ -558,6 +568,7 @@ async def request_validation_exception_handler(
         }
     },
 )
+@trace_function("ingestor.server.health_check", tracer=TRACER)
 async def health_check(check_dependencies: bool = False):
     """
     Perform a Health Check
@@ -586,6 +597,7 @@ async def health_check(check_dependencies: bool = False):
     return response
 
 
+@trace_function("ingestor.server.parse_json_data", tracer=TRACER)
 async def parse_json_data(
     data: str = Form(
         ...,
@@ -630,6 +642,7 @@ async def parse_json_data(
         },
     },
 )
+@trace_function("ingestor.server.upload_document", tracer=TRACER)
 async def upload_document(
     request: Request,
     documents: list[UploadFile] = File(...),
@@ -682,6 +695,7 @@ async def upload_document(
     tags=["Ingestion APIs"],
     response_model=IngestionTaskStatusResponse,
 )
+@trace_function("ingestor.server.get_task_status", tracer=TRACER)
 async def get_task_status(task_id: str):
     """Get the status of an ingestion task."""
 
@@ -721,6 +735,7 @@ async def get_task_status(task_id: str):
         },
     },
 )
+@trace_function("ingestor.server.update_documents", tracer=TRACER)
 async def update_documents(
     request: Request,
     documents: list[UploadFile] = File(...),
@@ -789,6 +804,7 @@ async def update_documents(
         },
     },
 )
+@trace_function("ingestor.server.get_documents", tracer=TRACER)
 async def get_documents(
     request: Request,
     collection_name: str = os.getenv("COLLECTION_NAME", ""),
@@ -839,6 +855,7 @@ async def get_documents(
         },
     },
 )
+@trace_function("ingestor.server.delete_documents", tracer=TRACER)
 async def delete_documents(
     request: Request,
     document_names: list[str] = Query(default=None),
@@ -900,6 +917,7 @@ async def delete_documents(
         },
     },
 )
+@trace_function("ingestor.server.get_collections", tracer=TRACER)
 async def get_collections(
     request: Request,
     vdb_endpoint: str = Query(
@@ -956,6 +974,7 @@ async def get_collections(
     deprecated=True,
     description="This endpoint is deprecated. Use POST /collection instead. Custom metadata is not supported in this endpoint.",
 )
+@trace_function("ingestor.server.create_collections", tracer=TRACER)
 async def create_collections(
     request: Request,
     vdb_endpoint: str = Query(
@@ -1022,6 +1041,7 @@ async def create_collections(
     },
 )
 
+@trace_function("ingestor.server.create_collection", tracer=TRACER)
 async def create_collection(request: Request, data: CreateCollectionRequest) -> CreateCollectionResponse:
     """
     Endpoint to create a collection with catalog metadata.
@@ -1083,6 +1103,7 @@ async def create_collection(request: Request, data: CreateCollectionRequest) -> 
         },
     },
 )
+@trace_function("ingestor.server.update_collection_metadata", tracer=TRACER)
 async def update_collection_metadata(
     collection_name: str,
     data: UpdateCollectionMetadataRequest,
@@ -1140,6 +1161,7 @@ async def update_collection_metadata(
         },
     },
 )
+@trace_function("ingestor.server.update_document_metadata", tracer=TRACER)
 async def update_document_metadata(
     collection_name: str,
     document_name: str,
@@ -1194,6 +1216,7 @@ async def update_document_metadata(
         },
     },
 )
+@trace_function("ingestor.server.delete_collections", tracer=TRACER)
 async def delete_collections(
     request: Request,
     vdb_endpoint: str = Query(
@@ -1230,6 +1253,7 @@ async def delete_collections(
         )
 
 
+@trace_function("ingestor.server.process_file_paths", tracer=TRACER)
 async def process_file_paths(filepaths: list[UploadFile], collection_name: str):
     """Process the uploaded files and return the list of file paths.
 

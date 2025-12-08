@@ -98,7 +98,7 @@ from nvidia_rag.utils.llm import get_llm, get_prompts, get_streaming_filter_thin
 from nvidia_rag.utils.reranker import get_ranking_model
 from nvidia_rag.utils.vdb import _get_vdb_op
 from nvidia_rag.utils.vdb.vdb_base import VDBRag
-from observability.otel_metrics import OtelMetrics
+from nvidia_rag.utils.observability.otel_metrics import OtelMetrics
 
 logger = logging.getLogger(__name__)
 
