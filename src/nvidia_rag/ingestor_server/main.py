@@ -2160,6 +2160,7 @@ class NvidiaRAGIngestor:
             )
 
             start_time = time.time()
+            ingest_start_ns = time.time_ns()
             results, failures, traces = await asyncio.to_thread(
                 lambda: nv_ingest_ingestor.ingest(
                     return_failures=True,
@@ -2168,6 +2169,14 @@ class NvidiaRAGIngestor:
                 )
             )
             total_time = time.time() - start_time
+
+            process_nv_ingest_traces(
+                traces,
+                tracer=TRACER,
+                span_namespace=f"nv_ingest.shallow_batch_{batch_number}",
+                batch_number=batch_number,
+                reference_time_ns=ingest_start_ns,
+            )
 
             logger.debug(
                 "Shallow extraction batch %d: %.2fs, %d results, %d failures",
@@ -2452,8 +2461,6 @@ class NvidiaRAGIngestor:
             f"== Batch {batch_number} Ingestion completed in {total_ingestion_time:.2f} seconds • Summary: {summary} =="
         )
         return document_info
-
-
 
     @trace_function("ingestor.main.get_failed_documents", tracer=TRACER)
     async def __get_failed_documents(
