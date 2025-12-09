@@ -48,7 +48,7 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers.string import StrOutputParser
 from langchain_core.prompts import MessagesPlaceholder
 from langchain_core.prompts.chat import ChatPromptTemplate
-from langchain_core.runnables import RunnableAssign
+from langchain_core.runnables import RunnableAssign, RunnableGenerator
 from opentelemetry import context as otel_context
 from requests import ConnectTimeout
 
@@ -94,7 +94,13 @@ from nvidia_rag.utils.embedding import get_embedding_model
 from nvidia_rag.utils.filter_expression_generator import (
     generate_filter_from_natural_language,
 )
-from nvidia_rag.utils.llm import get_llm, get_prompts, get_streaming_filter_think_parser_async
+from nvidia_rag.utils.llm import (
+    USAGE_SENTINEL_PREFIX,
+    get_llm,
+    get_prompts,
+    get_streaming_filter_think_parser_async,
+    stream_with_usage_sentinel,
+)
 from nvidia_rag.utils.reranker import get_ranking_model
 from nvidia_rag.utils.vdb import _get_vdb_op
 from nvidia_rag.utils.vdb.vdb_base import VDBRag
@@ -189,6 +195,9 @@ class NvidiaRAG:
         self.prompts = get_prompts()
         self.vdb_top_k = int(self.config.retriever.vdb_top_k)
         self.StreamingFilterThinkParser = get_streaming_filter_think_parser_async()
+        # Runnable that injects a final sentinel chunk carrying usage metadata
+        # as a special string; used only for streaming chains.
+        self.UsageSentinelParser = RunnableGenerator(stream_with_usage_sentinel)
 
         logger.info("NvidiaRAG initialization complete")
 
@@ -1259,14 +1268,17 @@ class NvidiaRAG:
             prompt_template = ChatPromptTemplate.from_messages(message)
             llm = get_llm(config=self.config, **llm_settings)
 
-            chain = (
+            # Chain for streaming: add usage-sentinel parser between LLM and
+            # think-token filter so we can surface token usage in the final chunk.
+            stream_chain = (
                 prompt_template
                 | llm
+                | self.UsageSentinelParser
                 | self.StreamingFilterThinkParser
                 | StrOutputParser()
             )
             # Create async stream generator
-            stream_gen = chain.astream(
+            stream_gen = stream_chain.astream(
                 {"question": query_text}, config={"run_name": "llm-stream"}
             )
             # Eagerly fetch first chunk to trigger any errors before returning response
@@ -2139,7 +2151,18 @@ class NvidiaRAG:
             self._print_conversation_history(message)
             prompt = ChatPromptTemplate.from_messages(message)
 
-            chain = prompt | llm | self.StreamingFilterThinkParser | StrOutputParser()
+            # Base chain (no usage sentinel) used for non-streaming reflection path.
+            base_chain = prompt | llm | self.StreamingFilterThinkParser | StrOutputParser()
+
+            # Streaming chain adds usage-sentinel parser between LLM and think-token
+            # filter so we can surface token usage in the final streamed chunk.
+            stream_chain = (
+                prompt
+                | llm
+                | self.UsageSentinelParser
+                | self.StreamingFilterThinkParser
+                | StrOutputParser()
+            )
 
             # Check response groundedness if we still have reflection
             # iterations available
@@ -2147,7 +2170,7 @@ class NvidiaRAG:
                 self.config.reflection.enable_reflection
                 and reflection_counter.remaining > 0
             ):
-                initial_response = await chain.ainvoke({"question": query, "context": docs})
+                initial_response = await base_chain.ainvoke({"question": query, "context": docs})
                 final_response, is_grounded = await check_response_groundedness(
                     query,
                     initial_response,
@@ -2175,8 +2198,8 @@ class NvidiaRAG:
                     status_code=ErrorCodeMapping.SUCCESS,
                 )
             else:
-                # Create async stream generator
-                stream_gen = chain.astream(
+                # Create async stream generator using the streaming chain
+                stream_gen = stream_chain.astream(
                     {"question": query, "context": docs},
                     config={"run_name": "llm-stream"},
                 )
