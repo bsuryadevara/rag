@@ -67,6 +67,7 @@ def _get_vdb_op(
             "gpu_index": CONFIG.vector_store.enable_gpu_index,
             "gpu_search": CONFIG.vector_store.enable_gpu_search,
             "embedding_model": embedding_model,
+            "stream": True,
         }
         if csv_file_path is not None:
             # Add custom metadata configurations
