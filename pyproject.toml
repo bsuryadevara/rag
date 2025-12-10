@@ -36,9 +36,9 @@ dependencies = [
     "lark>=1.2.2",
     "python-dateutil>=2.9.0.post0",
     "nv-ingest-api==25.9.0",
-    "nv-ingest-client==25.9.0",
     "tritonclient==2.57.0",
 ]
+# Removed     "nv-ingest-client==25.9.0"
 
 [project.optional-dependencies]
 rag = [

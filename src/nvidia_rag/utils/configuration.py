@@ -32,6 +32,16 @@ class VectorStoreConfig(ConfigWizard):
         default="milvus",
         help_txt="The name of vector store",  # supports "milvus", "elasticsearch"
     )
+    stream: bool = configfield(
+        "stream",
+        default=False,
+        help_txt="Flag to control streaming the data to the vector store",
+    )
+    stream_batch_size: int = configfield(
+        "stream_batch_size",
+        default=100,
+        help_txt="The batch size for streaming the data to the vector store",
+    )
     url: str = configfield(
         "url",
         default="http://localhost:19530",

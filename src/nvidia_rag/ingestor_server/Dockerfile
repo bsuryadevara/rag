@@ -25,7 +25,7 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # Install required ubuntu packages for setting up python 3.13
 RUN apt update && \
-    apt install -y curl software-properties-common libgl1 libglib2.0-0 libmagic1 file build-essential && \
+    apt install -y curl software-properties-common libgl1 libglib2.0-0 libmagic1 file build-essential git && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt update && apt install -y python3.13 python3.13-dev && \
     apt-get clean
@@ -47,6 +47,10 @@ COPY --from=builder /build/dist/*.whl /workspace/
 # Find the exact wheel name with version and store it in a variable
 RUN WHEEL_NAME=$(ls /workspace/nvidia_rag-*.whl) && \
     uv pip install --no-deps --no-cache-dir "$WHEEL_NAME"
+
+RUN git clone --depth 1 https://github.com/bsuryadevara/nv-ingest.git /tmp/nv-ingest && \
+    uv pip install --no-cache-dir /tmp/nv-ingest/client/ && \
+    rm -rf /tmp/nv-ingest
 
 # -------- Stage 3: Minimal Runtime Stage --------
 FROM ${BASE_IMAGE_URL}:${BASE_IMAGE_TAG} AS runtime
