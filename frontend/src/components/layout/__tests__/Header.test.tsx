@@ -38,7 +38,7 @@ describe('Header', () => {
       // KUI Logo renders multiple logo elements, check they exist
       const logoElements = screen.getAllByTestId('nv-logo-root');
       expect(logoElements).toHaveLength(2); // KUI renders two logo sizes
-      expect(screen.getByText('RAG Blueprint')).toBeInTheDocument();
+      expect(screen.getByText('RUNE Document Intelligence')).toBeInTheDocument();
     });
 
     it('renders notification bell', () => {
